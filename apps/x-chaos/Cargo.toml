@@ -1,0 +1,19 @@
+[package]
+name = "x-chaos"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+
+[[bin]]
+name = "x-chaos"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+emulators.workspace = true

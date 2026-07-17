@@ -1,0 +1,25 @@
+[workspace]
+resolver = "3"
+default-members = ["apps/x-chaos"]
+members = [
+    "apps/x-chaos",
+    "crates/*",
+]
+
+[workspace.package]
+version = "0.1.0"
+authors = ["Nguyễn Quý Ngọc"]
+edition = "2024"
+rust-version = "1.97.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ChaoswareHQ/x-chaos"
+homepage = "https://github.com/ChaoswareHQ/x-chaos"
+documentation = "https://chaoswarehq.github.io/x-chaos/"
+readme = "README.md"
+
+[workspace.dependencies]
+emulators = { path = "crates/emulators" }
+
+x-nes = "0.1.0"
+
+anyhow = "1.0.103"

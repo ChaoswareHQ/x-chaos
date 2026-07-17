@@ -1,0 +1,19 @@
+[package]
+name = "emulators"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+
+[lib]
+name = "nes"
+crate-type = ["cdylib"]
+path = "nintendo/nes/lib.rs"
+
+[dependencies]
+x-nes.workspace = true
