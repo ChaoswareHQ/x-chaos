@@ -1,5 +1,5 @@
 [package]
-name = "emulators"
+name = "controller"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -10,10 +10,15 @@ homepage.workspace = true
 documentation.workspace = true
 readme.workspace = true
 
+[features]
+default = ["std"]
+std = ["dep:x-controller"]
+mcu = []
+
 [lib]
-name = "emulators"
-crate-type = ["cdylib", "staticlib", "lib"]
+name = "controller"
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [dependencies]
 base = { workspace = true }
-x-nes.workspace = true
+x-controller = { workspace = true, optional = true }

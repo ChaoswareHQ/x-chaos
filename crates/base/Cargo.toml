@@ -1,5 +1,5 @@
 [package]
-name = "emulators"
+name = "base"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -10,10 +10,16 @@ homepage.workspace = true
 documentation.workspace = true
 readme.workspace = true
 
-[lib]
-name = "emulators"
-crate-type = ["cdylib", "staticlib", "lib"]
+[features]
+default = ["std"]
+std = []
+mcu = []
 
-[dependencies]
-base = { workspace = true }
-x-nes.workspace = true
+[lib]
+name = "base"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"

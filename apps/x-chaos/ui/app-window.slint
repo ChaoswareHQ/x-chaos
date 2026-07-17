@@ -1,0 +1,74 @@
+import { Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
+
+/// Main application window for x-chaos.
+export component AppWindow inherits Window {
+    in-out property <image> emulator-frame;
+    in-out property <string> status-text: "Ready";
+    in-out property <bool> paused: false;
+
+    /// Emitted when the user presses or releases a key.
+    callback keyboard(string, bool);
+    /// Emitted when Reset is clicked.
+    callback reset();
+    /// Emitted when Pause/Resume is clicked.
+    callback pause();
+
+    min-width: 800px;
+    min-height: 600px;
+    title: "x-chaos";
+
+    forward-focus: emulator-view;
+
+    VerticalBox {
+        // Emulator display area
+        emulator-view := FocusScope {
+            width: 100%;
+            height: 100%;
+
+            key-released(key) => {
+                root.keyboard(key.text, false);
+                accept
+            }
+            key-pressed(key) => {
+                root.keyboard(key.text, true);
+                accept
+            }
+
+            Rectangle {
+                width: 100%;
+                height: 100%;
+                background: black;
+
+                image := Image {
+                    source: emulator-frame;
+                    width: 100%;
+                    height: 100%;
+                    image-fit: contain;
+                }
+            }
+        }
+
+        // Bottom status bar
+        HorizontalBox {
+            height: 24px;
+            padding: 4px;
+
+            Text {
+                text: status-text;
+                vertical-alignment: center;
+            }
+
+            HorizontalBox {
+                alignment: end;
+                Button {
+                    text: paused ? "Resume" : "Pause";
+                    clicked => { paused = !paused; pause(); }
+                }
+                Button {
+                    text: "Reset";
+                    clicked => { reset(); }
+                }
+            }
+        }
+    }
+}

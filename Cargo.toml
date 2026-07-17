@@ -18,8 +18,20 @@ documentation = "https://chaoswarehq.github.io/x-chaos/"
 readme = "README.md"
 
 [workspace.dependencies]
-emulators = { path = "crates/emulators" }
+# Workspace crates
+audio       = { path = "crates/audio" }
+base        = { path = "crates/base" }
+controller  = { path = "crates/controller" }
+gfx         = { path = "crates/gfx" }
+network     = { path = "crates/network" }
+emulators   = { path = "crates/emulators" }
 
-x-nes = "0.1.1"
+# Published x-* crates
+x-gfx        = "0.1.0"
+x-audio      = "0.1.0"
+x-controller = "0.1.0"
+x-nes        = "0.1.1"
 
+# GUI
+slint = "1.17.1"
 anyhow = "1.0.103"

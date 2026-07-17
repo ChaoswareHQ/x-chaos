@@ -1,5 +1,5 @@
 [package]
-name = "emulators"
+name = "gfx"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -10,10 +10,15 @@ homepage.workspace = true
 documentation.workspace = true
 readme.workspace = true
 
+[features]
+default = ["gpu"]
+gpu = ["dep:x-gfx"]
+mcu = []
+
 [lib]
-name = "emulators"
-crate-type = ["cdylib", "staticlib", "lib"]
+name = "gfx"
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [dependencies]
 base = { workspace = true }
-x-nes.workspace = true
+x-gfx = { workspace = true, optional = true }
