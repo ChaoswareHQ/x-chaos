@@ -150,6 +150,7 @@ fn main() {
                 }
                 (core.table.drain_audio)(handle);
 
+                // Render
                 let (dw, dh) = surface.size();
                 let mut buf = vec![0u32; (dw * dh) as usize];
                 palette.fill_frame(&raw_frame, &mut buf, dw, dh);
