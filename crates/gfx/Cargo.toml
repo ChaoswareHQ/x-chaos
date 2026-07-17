@@ -12,7 +12,7 @@ readme.workspace = true
 
 [features]
 default = ["gpu"]
-gpu = ["dep:x-gfx"]
+gpu = ["dep:winit", "dep:softbuffer"]
 mcu = []
 
 [lib]
@@ -21,4 +21,7 @@ crate-type = ["lib", "cdylib", "staticlib"]
 
 [dependencies]
 base = { workspace = true }
-x-gfx = { workspace = true, optional = true }
+winit = { version = "0.30.13", optional = true, default-features = false, features = [
+    "rwh_06", "x11", "wayland", "wayland-dlopen",
+] }
+softbuffer = { version = "0.4.8", optional = true }

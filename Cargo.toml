@@ -4,6 +4,7 @@ default-members = ["apps/x-chaos"]
 members = [
     "apps/x-chaos",
     "crates/*",
+    "crates/emulators/nintendo/nes",
 ]
 
 [workspace.package]
@@ -18,20 +19,18 @@ documentation = "https://chaoswarehq.github.io/x-chaos/"
 readme = "README.md"
 
 [workspace.dependencies]
-# Workspace crates
-audio       = { path = "crates/audio" }
 base        = { path = "crates/base" }
+audio       = { path = "crates/audio" }
 controller  = { path = "crates/controller" }
+emulators   = { path = "crates/emulators" }
+ffi         = { path = "crates/ffi" }
 gfx         = { path = "crates/gfx" }
 network     = { path = "crates/network" }
-emulators   = { path = "crates/emulators" }
 
-# Published x-* crates
 x-gfx        = "0.1.0"
 x-audio      = "0.1.0"
 x-controller = "0.1.0"
 x-nes        = "0.1.1"
 
-# GUI
-slint = "1.17.1"
+libloading = "0.8"
 anyhow = "1.0.103"

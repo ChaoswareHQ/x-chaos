@@ -1,5 +1,5 @@
 [package]
-name = "emulators"
+name = "ffi"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -11,9 +11,5 @@ documentation.workspace = true
 readme.workspace = true
 
 [lib]
-name = "emulators"
 crate-type = ["lib"]
-
-[dependencies]
-base = { workspace = true }
-x-nes.workspace = true
+name = "ffi"

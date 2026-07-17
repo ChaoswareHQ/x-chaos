@@ -1,16 +1,9 @@
-pub mod nintendo;
-
 use base::frame::Gamepad;
 
-/// NES frame dimensions used by the [`Emulator`] trait.
 pub const FRAME_W: u32 = 256;
 pub const FRAME_H: u32 = 240;
 
 /// Common interface that all emulator cores implement.
-///
-/// The host loop calls [`Self::tick()`] in a tight loop, checks
-/// [`Self::frame_complete()`], then drains audio and passes the
-/// frame + palette to the gfx crate.
 pub trait Emulator {
     fn tick(&mut self);
     fn frame_complete(&self) -> bool;

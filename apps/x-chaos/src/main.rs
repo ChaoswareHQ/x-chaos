@@ -1,46 +1,100 @@
-// x-chaos — Multi-system emulator frontend
-//
-// Structure:
-//   main.rs        Entry point, CLI argument parsing
-//   app.rs         Application state and event loop
-//   ui/            Slint UI definitions
+mod core_loader;
 
-mod app;
+use std::time::{Duration, Instant};
 
-use anyhow::Context;
+use gfx::desktop::{DesktopSurface, Event};
+use gfx::palette::Palette;
 
-fn main() -> anyhow::Result<()> {
+const NES_W: u32 = 256;
+const NES_H: u32 = 240;
+const SCALE: u32 = 3;
+const NES_FRAME_NS: u64 = 16_639_000;
+
+fn main() {
     let args: Vec<String> = std::env::args().collect();
-
     if args.len() < 2 {
-        anyhow::bail!("Usage: x-chaos <rom-file> [system]");
+        eprintln!("Usage: x-chaos <rom.nes>");
+        eprintln!("       Drag a ROM file onto the executable");
+        std::process::exit(1);
     }
 
-    let rom_path = &args[1];
-    let system = args.get(2).map(|s| s.as_str()).unwrap_or("nes");
+    let rom_data = std::fs::read(&args[1]).expect("failed to read ROM");
 
-    // Detect system by file extension if not specified
-    let system = if system == "nes" || rom_path.ends_with(".nes") {
-        "nes"
-    } else {
-        anyhow::bail!("Unsupported system: {system}");
-    };
+    let cores = unsafe { core_loader::scan_cores() };
+    let core = cores.first().expect("No cores found in cores/ directory");
+    let handle = (core.table.create)(rom_data.as_ptr(), rom_data.len());
+    assert!(!handle.is_null(), "Core rejected the ROM");
 
-    let data = std::fs::read(rom_path)
-        .with_context(|| format!("Failed to read ROM: {rom_path}"))?;
+    let palette = Palette::nes();
+    let mut acc = Duration::new(0, 0);
+    let mut last = Instant::now();
+    let frame_dur = Duration::from_nanos(NES_FRAME_NS);
 
-    // Create the emulator
-    let emu: Box<dyn emulators::Emulator> = match system {
-        "nes" => {
-            let nes = emulators::nintendo::NesEmulator::new(&data)
-                .context("Invalid NES ROM")?;
-            Box::new(nes)
+    DesktopSurface::run("x-chaos", NES_W * SCALE, NES_H * SCALE, move |surface, event| {
+        match event {
+            Event::Close => return false,
+
+            Event::Key(ke) => {
+                use base::frame::Gamepad;
+                use gfx::winit::keyboard::{KeyCode, PhysicalKey};
+
+                let mut gp = Gamepad::new();
+                match ke.physical_key {
+                    PhysicalKey::Code(KeyCode::KeyZ) => gp.a = ke.state.is_pressed(),
+                    PhysicalKey::Code(KeyCode::KeyX) => gp.b = ke.state.is_pressed(),
+                    PhysicalKey::Code(KeyCode::ShiftLeft | KeyCode::ShiftRight) => {
+                        gp.select = ke.state.is_pressed()
+                    }
+                    PhysicalKey::Code(KeyCode::Enter) => gp.start = ke.state.is_pressed(),
+                    PhysicalKey::Code(KeyCode::ArrowUp) => gp.up = ke.state.is_pressed(),
+                    PhysicalKey::Code(KeyCode::ArrowDown) => gp.down = ke.state.is_pressed(),
+                    PhysicalKey::Code(KeyCode::ArrowLeft) => gp.left = ke.state.is_pressed(),
+                    PhysicalKey::Code(KeyCode::ArrowRight) => gp.right = ke.state.is_pressed(),
+                    _ => return true,
+                }
+                (core.table.set_pad)(handle, gp.to_byte());
+            }
+
+            Event::Draw => {
+                let now = Instant::now();
+                acc += now - last;
+                last = now;
+                if acc > Duration::from_millis(100) {
+                    acc = Duration::from_millis(100);
+                }
+
+                while acc >= frame_dur {
+                    while !(core.table.frame_complete)(handle) {
+                        (core.table.tick)(handle);
+                    }
+                    acc -= frame_dur;
+
+                    // Audio
+                    let mut audio_len = 0;
+                    let audio_ptr = (core.table.audio)(handle, &mut audio_len);
+                    if audio_len > 0 {
+                        let _ = unsafe { std::slice::from_raw_parts(audio_ptr, audio_len) };
+                    }
+                    (core.table.drain_audio)(handle);
+                }
+
+                // Render
+                let (dw, dh) = surface.size();
+                let buf = surface.buffer_mut();
+                if !buf.is_empty() {
+                    let frame_ptr = (core.table.frame)(handle);
+                    if !frame_ptr.is_null() {
+                        let frame = unsafe {
+                            std::slice::from_raw_parts(frame_ptr, (NES_W * NES_H) as usize)
+                        };
+                        palette.fill_frame(frame, buf, dw.max(1), dh.max(1));
+                    }
+                }
+            }
+
+            Event::Resize(_, _) => {}
         }
-        _ => unreachable!(),
-    };
 
-    // Run the app
-    app::App::run(emu)?;
-
-    Ok(())
+        true
+    });
 }
