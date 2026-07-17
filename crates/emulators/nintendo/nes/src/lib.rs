@@ -1,5 +1,6 @@
 use std::ptr;
 
+use base::frame::Gamepad;
 use emulators::Emulator;
 use ffi::{CoreHandle, CoreInfo, CoreTable};
 use nes::{bus::Bus, cpu::CpuRp2a03, rom::Rom, reset, tick};
@@ -8,13 +9,11 @@ struct NesEmu {
     cpu: CpuRp2a03,
     bus: Bus,
     rom_data: Vec<u8>,
-    pad: base::frame::Gamepad,
-    _pad2: base::frame::Gamepad,
+    pad: Gamepad,
 }
 
-impl Emulator for NesEmu {
+impl NesEmu {
     fn tick(&mut self) {
-        // Sync gamepad to x-nes bus
         self.bus.pad1.a = self.pad.a;
         self.bus.pad1.b = self.pad.b;
         self.bus.pad1.select = self.pad.select;
@@ -23,29 +22,12 @@ impl Emulator for NesEmu {
         self.bus.pad1.down = self.pad.down;
         self.bus.pad1.left = self.pad.left;
         self.bus.pad1.right = self.pad.right;
-
         tick(&mut self.cpu, &mut self.bus);
     }
 
-    fn frame_complete(&self) -> bool { self.bus.ppu.frame_complete }
-    fn frame(&self) -> &[u8; 256 * 240] { &self.bus.ppu.frame }
-    fn audio(&self) -> &[f32] { &self.bus.apu.audio_samples[..self.bus.apu.sample_count] }
-    fn drain_audio(&mut self) { self.bus.apu.sample_count = 0; }
-    fn pad1(&mut self) -> &mut base::frame::Gamepad { &mut self.pad }
-    fn pad2(&mut self) -> &mut base::frame::Gamepad { &mut self._pad2 }
-
-    fn reset(&mut self) {
-        if let Some(rom) = Rom::new(&self.rom_data) {
-            let mapper = rom.create_mapper();
-            self.cpu = CpuRp2a03::new(0);
-            self.bus = Bus::new(mapper);
-            reset(&mut self.cpu, &mut self.bus);
-        }
-    }
-    fn sample_rate(&self) -> u32 { 44100 }
+    fn frame_ready(&self) -> bool { self.bus.ppu.frame_complete }
+    fn frame_ack(&mut self) { self.bus.ppu.frame_complete = false; }
 }
-
-struct CoreWrap(Box<dyn Emulator>);
 
 extern "C" fn info() -> CoreInfo {
     CoreInfo {
@@ -66,59 +48,67 @@ extern "C" fn create(data: *const u8, len: usize) -> CoreHandle {
     let mut cpu = CpuRp2a03::new(0);
     let mut bus = Bus::new(rom.create_mapper());
     reset(&mut cpu, &mut bus);
-    let emu = NesEmu {
-        cpu,
-        bus,
-        rom_data: slice.to_vec(),
-        pad: base::frame::Gamepad::new(),
-        _pad2: base::frame::Gamepad::new(),
-    };
-    Box::into_raw(Box::new(CoreWrap(Box::new(emu)))) as CoreHandle
+    Box::into_raw(Box::new(NesEmu {
+        cpu, bus, rom_data: slice.to_vec(), pad: Gamepad::new(),
+    })) as CoreHandle
 }
 
 extern "C" fn destroy(handle: CoreHandle) {
-    if !handle.is_null() { unsafe { drop(Box::from_raw(handle as *mut CoreWrap)); } }
+    if !handle.is_null() { unsafe { drop(Box::from_raw(handle as *mut NesEmu)); } }
 }
 
 extern "C" fn tick_(handle: CoreHandle) {
-    unsafe { (&mut *(handle as *mut CoreWrap)).0.tick(); }
+    unsafe { (&mut *(handle as *mut NesEmu)).tick(); }
 }
 
 extern "C" fn frame_complete(handle: CoreHandle) -> bool {
-    unsafe { (*(handle as *const CoreWrap)).0.frame_complete() }
+    unsafe { (*(handle as *const NesEmu)).frame_ready() }
+}
+
+extern "C" fn frame_ack(handle: CoreHandle) {
+    unsafe { (&mut *(handle as *mut NesEmu)).frame_ack(); }
 }
 
 extern "C" fn frame(handle: CoreHandle) -> *const u8 {
-    unsafe { (*(handle as *const CoreWrap)).0.frame().as_ptr() }
+    unsafe { (*(handle as *const NesEmu)).bus.ppu.frame.as_ptr() }
 }
 
 extern "C" fn audio(handle: CoreHandle, out_len: &mut usize) -> *const f32 {
-    let e = unsafe { &*(handle as *const CoreWrap) };
-    let s = e.0.audio();
-    *out_len = s.len();
-    s.as_ptr()
+    let e = unsafe { &*(handle as *const NesEmu) };
+    *out_len = e.bus.apu.sample_count;
+    e.bus.apu.audio_samples.as_ptr()
 }
 
 extern "C" fn drain_audio(handle: CoreHandle) {
-    unsafe { (&mut *(handle as *mut CoreWrap)).0.drain_audio(); }
+    unsafe { (&mut *(handle as *mut NesEmu)).bus.apu.sample_count = 0; }
 }
 
 extern "C" fn set_pad(handle: CoreHandle, byte: u8) {
-    let e = unsafe { &mut *(handle as *mut CoreWrap) };
-    let mut gp = base::frame::Gamepad::new();
+    let e = unsafe { &mut *(handle as *mut NesEmu) };
+    let mut gp = Gamepad::new();
     gp.from_byte(byte);
-    *e.0.pad1() = gp;
+    e.pad = gp;
 }
 
 extern "C" fn reset_(handle: CoreHandle) {
-    unsafe { (&mut *(handle as *mut CoreWrap)).0.reset(); }
+    let e = unsafe { &mut *(handle as *mut NesEmu) };
+    if let Some(rom) = Rom::new(&e.rom_data) {
+        let mapper = rom.create_mapper();
+        e.cpu = CpuRp2a03::new(0);
+        e.bus = Bus::new(mapper);
+        reset(&mut e.cpu, &mut e.bus);
+    }
 }
 
 extern "C" fn sample_rate(_handle: CoreHandle) -> u32 { 44100 }
+
+extern "C" fn set_sample_rate(handle: CoreHandle, rate: f64) {
+    unsafe { (&mut *(handle as *mut NesEmu)).bus.apu.set_sample_rate(rate); }
+}
 
 #[unsafe(no_mangle)]
 pub static core_table: CoreTable = CoreTable {
     info, create, destroy,
     tick: tick_, frame_complete, frame, audio, drain_audio,
-    set_pad, reset: reset_, sample_rate,
+    set_pad, reset: reset_, frame_ack, sample_rate, set_sample_rate,
 };

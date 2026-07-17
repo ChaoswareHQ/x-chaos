@@ -2254,9 +2254,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base",
+ "cpal",
  "ffi",
  "gfx",
  "libloading",
+ "ringbuf",
 ]
 
 [[package]]

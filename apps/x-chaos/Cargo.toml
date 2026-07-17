@@ -20,3 +20,5 @@ base.workspace = true
 ffi.workspace = true
 gfx.workspace = true
 libloading.workspace = true
+cpal.workspace = true
+ringbuf.workspace = true

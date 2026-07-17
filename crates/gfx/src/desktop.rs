@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use softbuffer::{Context, Surface};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -6,26 +8,20 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowAttributes};
 
 /// A desktop window with a software framebuffer.
-///
-/// Write ARGB32 pixels into [`Self::buffer_mut()`] and call
-/// [`Self::present()`] to display them.
 pub struct DesktopSurface {
-    window: std::rc::Rc<Window>,
-    surf: Surface<std::rc::Rc<Window>, std::rc::Rc<Window>>,
+    window: Rc<Window>,
+    surf: Surface<Rc<Window>, Rc<Window>>,
     width: u32,
     height: u32,
 }
 
 impl DesktopSurface {
     /// Run a closure inside a winit event loop.
-    ///
-    /// The closure is called for each event. Return `true` to
-    /// continue, `false` to exit.
     pub fn run(
         title: &str,
         width: u32,
         height: u32,
-        frame_fn: impl FnMut(&mut DesktopSurface, Event) -> bool,
+        mut frame_fn: impl FnMut(&mut DesktopSurface, Event) -> bool,
     ) {
         struct Handler<F: FnMut(&mut DesktopSurface, Event) -> bool> {
             surface: Option<DesktopSurface>,
@@ -37,7 +33,7 @@ impl DesktopSurface {
 
         impl<F: FnMut(&mut DesktopSurface, Event) -> bool> ApplicationHandler for Handler<F> {
             fn resumed(&mut self, el: &ActiveEventLoop) {
-                let window = std::rc::Rc::new(
+                let window = Rc::new(
                     el.create_window(
                         WindowAttributes::default()
                             .with_title(&self.title)
@@ -45,13 +41,14 @@ impl DesktopSurface {
                     )
                     .expect("window"),
                 );
+                let phys = window.inner_size();
                 let ctx = Context::new(window.clone()).expect("context");
                 let surf = Surface::new(&ctx, window.clone()).expect("surface");
                 self.surface = Some(DesktopSurface {
                     window,
                     surf,
-                    width: self.w,
-                    height: self.h,
+                    width: phys.width.max(1),
+                    height: phys.height.max(1),
                 });
                 el.set_control_flow(ControlFlow::Poll);
             }
@@ -104,21 +101,13 @@ impl DesktopSurface {
         el.run_app(&mut h).unwrap();
     }
 
-    /// Get the pixel buffer as ARGB32.
-    pub fn buffer_mut(&mut self) -> &mut [u32] {
-        match self.surf.buffer_mut() {
-            Ok(mut buf) => {
-                let len = buf.len() / 4;
-                let ptr = buf.as_mut_ptr() as *mut u32;
-                unsafe { std::slice::from_raw_parts_mut(ptr, len) }
-            }
-            Err(_) => &mut [],
-        }
-    }
-
-    /// Present the buffer to the window.
-    pub fn present(&mut self) {
-        if let Ok(buf) = self.surf.buffer_mut() {
+    /// Write ARGB32 pixels to the screen and present.
+    ///
+    /// `pixels` must have exactly `width * height` entries.
+    pub fn present(&mut self, pixels: &[u32], width: u32, height: u32) {
+        if let Ok(mut buf) = self.surf.buffer_mut() {
+            let n = buf.len().min(pixels.len());
+            buf[..n].copy_from_slice(&pixels[..n]);
             let _ = buf.present();
         }
     }

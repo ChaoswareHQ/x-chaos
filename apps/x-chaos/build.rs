@@ -1,25 +1,29 @@
+use std::path::Path;
+
 fn main() {
-    // Copy the built NES core -> cores/nes.dll next to executable
+    // Copy the built NES core to cores/nes.dll next to the executable.
+    // Check both the deps/ directory and the target root.
     let out_dir = std::env::var("OUT_DIR").unwrap();
-    let target = std::path::Path::new(&out_dir);
-    let build_dir = target
-        .ancestors()
-        .find(|p| p.join("deps").exists())
-        .unwrap();
+    let out = Path::new(&out_dir);
 
-    let deps = build_dir.join("deps");
-    if deps.exists() {
-        for entry in std::fs::read_dir(&deps).unwrap() {
-            let entry = entry.unwrap();
-            let path = entry.path();
-            let name = entry.file_name().to_string_lossy().to_string();
+    // Walk up from OUT_DIR to find the build root (where x-chaos.exe ends up)
+    let build_root = out.ancestors()
+        .find(|p| p.join("build.rs").exists() || p.ends_with("release") || p.ends_with("debug"))
+        .unwrap_or_else(|| out);
 
-            if name.starts_with("nes.dll") || (name.starts_with("nes-") && name.ends_with(".dll")) {
-                let cores_dir = build_dir.join("cores");
-                std::fs::create_dir_all(&cores_dir).unwrap();
-                std::fs::copy(&path, cores_dir.join("nes.dll")).unwrap();
-                break;
-            }
+    // The cdylib might be in build_root itself or build_root/deps/
+    let candidates = [
+        build_root.join("nes.dll"),
+        build_root.join("deps").join("nes.dll"),
+    ];
+
+    for src in &candidates {
+        if src.exists() {
+            let cores = build_root.join("cores");
+            std::fs::create_dir_all(&cores).unwrap();
+            std::fs::copy(src, cores.join("nes.dll")).unwrap();
+            println!("cargo:warning=NES core copied");
+            return;
         }
     }
 }
