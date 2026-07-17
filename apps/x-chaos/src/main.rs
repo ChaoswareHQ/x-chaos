@@ -1,5 +1,8 @@
 mod core_loader;
 
+use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -16,8 +19,9 @@ const FRAME_DUR: Duration = Duration::from_nanos(16_639_000);
 struct AudioOut {
     #[allow(dead_code)]
     stream: cpal::Stream,
-    tx: ringbuf::CachingProd<std::sync::Arc<HeapRb<f32>>>,
+    tx: ringbuf::CachingProd<Arc<HeapRb<f32>>>,
     sr: u32,
+    hold: Arc<AtomicU32>,
 }
 
 fn init_audio() -> Option<AudioOut> {
@@ -30,10 +34,9 @@ fn init_audio() -> Option<AudioOut> {
 
     let rb = HeapRb::<f32>::new(65536);
     let (mut prod, mut cons) = rb.split();
-    let hold = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let hold = Arc::new(AtomicU32::new(0));
     let hold_cb = hold.clone();
 
-    // Pre-fill 4 frames of silence
     for _ in 0..(sr as f64 / 60.0 * 4.0) as usize {
         let _ = prod.try_push(0.0);
     }
@@ -45,10 +48,9 @@ fn init_audio() -> Option<AudioOut> {
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                 for frame in data.chunks_mut(ch) {
                     let s = cons.try_pop().unwrap_or_else(|| {
-                        // Sample-and-hold: repeat last sample instead of silence
-                        f32::from_bits(hold_cb.load(std::sync::atomic::Ordering::Relaxed))
+                        f32::from_bits(hold_cb.load(Ordering::Relaxed))
                     });
-                    hold_cb.store(s.to_bits(), std::sync::atomic::Ordering::Relaxed);
+                    hold_cb.store(s.to_bits(), Ordering::Relaxed);
                     for sample in frame.iter_mut() {
                         *sample = s;
                     }
@@ -59,7 +61,7 @@ fn init_audio() -> Option<AudioOut> {
         )
         .ok()?;
     stream.play().ok()?;
-    Some(AudioOut { stream, tx: prod, sr })
+    Some(AudioOut { stream, tx: prod, sr, hold })
 }
 
 fn main() {
@@ -117,12 +119,10 @@ fn main() {
                 }
                 last = now;
 
-                // Tick exactly one frame
                 while !(core.table.frame_complete)(handle) {
                     (core.table.tick)(handle);
                 }
 
-                // Save frame
                 let fptr = (core.table.frame)(handle);
                 if !fptr.is_null() {
                     let frame = unsafe {
@@ -141,8 +141,7 @@ fn main() {
                     if let Some(ref mut a) = audio {
                         let pushed = a.tx.push_slice(samples);
                         if pushed > 0 {
-                            hold.store(samples[pushed - 1].to_bits(),
-                                std::sync::atomic::Ordering::Relaxed);
+                            a.hold.store(samples[pushed - 1].to_bits(), Ordering::Relaxed);
                         }
                         if pushed < audio_len && pushed == 0 {
                             eprintln!("audio buffer full");
@@ -151,7 +150,6 @@ fn main() {
                 }
                 (core.table.drain_audio)(handle);
 
-                // Render
                 let (dw, dh) = surface.size();
                 let mut buf = vec![0u32; (dw * dh) as usize];
                 palette.fill_frame(&raw_frame, &mut buf, dw, dh);
